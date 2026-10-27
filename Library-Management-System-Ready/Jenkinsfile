@@ -1,7 +1,10 @@
+
 pipeline {
     agent any
 
     environment {
+        PROJECT_DIR = 'Library-Management-System-Ready'
+
         DOCKER_IMAGE = 'jino2006/library-management-system'
         DOCKER_TAG = 'v1'
 
@@ -11,18 +14,45 @@ pipeline {
     }
 
     stages {
+        stage('Verify Project Files') {
+            steps {
+                bat '''
+                    if not exist "%PROJECT_DIR%\\pom.xml" (
+                        echo ERROR: pom.xml not found in project folder
+                        exit /b 1
+                    )
+                    if not exist "%PROJECT_DIR%\\Dockerfile" (
+                        echo ERROR: Dockerfile not found in project folder
+                        exit /b 1
+                    )
+                    if not exist "%PROJECT_DIR%\\deployment.yaml" (
+                        echo ERROR: deployment.yaml not found in project folder
+                        exit /b 1
+                    )
+                    if not exist "%PROJECT_DIR%\\service.yaml" (
+                        echo ERROR: service.yaml not found in project folder
+                        exit /b 1
+                    )
+                    echo All required project files found.
+                '''
+            }
+        }
 
         stage('Build with Maven') {
             steps {
-                bat 'mvn clean package -DskipTests'
+                dir('Library-Management-System-Ready') {
+                    bat 'mvn clean package -DskipTests'
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                bat '''
-                    "%DOCKER_EXE%" build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
-                '''
+                dir('Library-Management-System-Ready') {
+                    bat '''
+                        "%DOCKER_EXE%" build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
+                    '''
+                }
             }
         }
 
@@ -49,18 +79,19 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                bat '''
-                    "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" apply -f deployment.yaml
-                    if errorlevel 1 exit /b 1
+                dir('Library-Management-System-Ready') {
+                    bat '''
+                        "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" apply -f deployment.yaml
+                        if errorlevel 1 exit /b 1
 
-                    "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" apply -f service.yaml
-                    if errorlevel 1 exit /b 1
+                        "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" apply -f service.yaml
+                        if errorlevel 1 exit /b 1
 
-                    "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" rollout status deployment/library-management-system
-                '''
+                        "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" rollout status deployment/library-management-system
+                    '''
+                }
             }
         }
-
     }
 
     post {
@@ -68,7 +99,7 @@ pipeline {
             echo 'Pipeline completed successfully!'
         }
         failure {
-            echo 'Pipeline failed. Check Console Output for the failing stage.'
+            echo 'Pipeline failed. Check Console Output for the first error.'
         }
     }
 }
