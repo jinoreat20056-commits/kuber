@@ -1,5 +1,4 @@
 
-
 pipeline {
     agent any
 
@@ -19,10 +18,22 @@ pipeline {
         stage('Verify Project Files') {
             steps {
                 bat '''
-                    if not exist "%PROJECT_DIR%\\pom.xml" exit /b 1
-                    if not exist "%PROJECT_DIR%\\Dockerfile" exit /b 1
-                    if not exist "%PROJECT_DIR%\\deployment.yaml" exit /b 1
-                    if not exist "%PROJECT_DIR%\\service.yaml" exit /b 1
+                    if not exist "%PROJECT_DIR%\\pom.xml" (
+                        echo ERROR: pom.xml missing
+                        exit /b 1
+                    )
+                    if not exist "%PROJECT_DIR%\\Dockerfile" (
+                        echo ERROR: Dockerfile missing
+                        exit /b 1
+                    )
+                    if not exist "%PROJECT_DIR%\\deployment.yaml" (
+                        echo ERROR: deployment.yaml missing
+                        exit /b 1
+                    )
+                    if not exist "%PROJECT_DIR%\\service.yaml" (
+                        echo ERROR: service.yaml missing
+                        exit /b 1
+                    )
                     echo All required files found.
                 '''
             }
@@ -47,52 +58,61 @@ pipeline {
             }
         }
 
-       
-stage('Test Docker Hub Login') {
-   
-stage('Test Docker Hub Login') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-            powershell '''
-                if ($env:DOCKER_USER -ne "jino2006") {
-                    throw "Jenkins credential username is incorrect"
-                }
-
-                if ([string]::IsNullOrWhiteSpace($env:DOCKER_PASS)) {
-                    throw "Jenkins credential password is empty"
-                }
-
-                Write-Output "Username is correct and token is present."
-                Write-Output "Token length: $($env:DOCKER_PASS.Length)"
-            '''
-        }
-    }
-}
-
-
-
-        stage('Push to Docker Hub') {
+        stage('Verify Docker Hub Credential') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    bat '''
-                        @echo off
-                        echo %DOCKER_PASS% | "%DOCKER_EXE%" login -u %DOCKER_USER% --password-stdin
-                        if errorlevel 1 exit /b 1
+                    powershell '''
+                        if ($env:DOCKER_USER -ne "jino2006") {
+                            throw "Incorrect Docker Hub username in Jenkins credential."
+                        }
 
-                        "%DOCKER_EXE%" push %DOCKER_IMAGE%:%DOCKER_TAG%
-                        if errorlevel 1 exit /b 1
+                        if ([string]::IsNullOrWhiteSpace($env:DOCKER_PASS)) {
+                            throw "Docker Hub token is empty."
+                        }
 
-                        "%DOCKER_EXE%" logout
+                        Write-Output "Credential username is correct."
+                        Write-Output "Token is present."
+                        Write-Output "Token length: $($env:DOCKER_PASS.Length)"
                     '''
                 }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
+
+                        $env:DOCKER_PASS |
+                            & $env:DOCKER_EXE login `
+                                -u $env:DOCKER_USER `
+                                --password-stdin
+
+                        if ($LASTEXITCODE -ne 0) {
+                            throw "Docker Hub login failed. Check the saved credential and PAT permissions."
+                        }
+
+                        Write-Output "Docker Hub login succeeded."
+                    '''
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                bat '''
+                    "%DOCKER_EXE%" push %DOCKER_IMAGE%:%DOCKER_TAG%
+                    if errorlevel 1 exit /b 1
+                '''
             }
         }
 
@@ -116,10 +136,12 @@ stage('Test Docker Hub Login') {
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo 'SUCCESS: Build, Docker push, and Kubernetes deployment completed.'
         }
+
         failure {
-            echo 'Pipeline failed. Check the first error in Console Output.'
+            echo 'FAILED: Check the first error in Console Output.'
         }
     }
 }
+
