@@ -79,7 +79,7 @@ stage('Verify Docker Hub Credential') {
                 try {
                     $sha = $algorithm.ComputeHash($bytes)
                     $actual = ([BitConverter]::ToString($sha)).Replace("-", "")
-                    $expected = "PASTE_FINGERPRINT_HERE"
+                    $expected = "46FC54918CB675B94965ACFBEDB0234AAAB3F1C9334397423A944D40E471E42B"
 
                     if ($actual -cne $expected) {
                         throw "Jenkins credential does not match the tested PAT."
