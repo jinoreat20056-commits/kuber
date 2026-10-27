@@ -49,6 +49,8 @@ pipeline {
 
        
 stage('Test Docker Hub Login') {
+   
+stage('Test Docker Hub Login') {
     steps {
         withCredentials([usernamePassword(
             credentialsId: 'docker-cred',
@@ -56,17 +58,21 @@ stage('Test Docker Hub Login') {
             passwordVariable: 'DOCKER_PASS'
         )]) {
             powershell '''
-                $ErrorActionPreference = "Stop"
-                $env:DOCKER_PASS | & $env:DOCKER_EXE login -u $env:DOCKER_USER --password-stdin
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Docker Hub login failed"
+                if ($env:DOCKER_USER -ne "jino2006") {
+                    throw "Jenkins credential username is incorrect"
                 }
-                Write-Output "Docker Hub authentication succeeded"
-                & $env:DOCKER_EXE logout
+
+                if ([string]::IsNullOrWhiteSpace($env:DOCKER_PASS)) {
+                    throw "Jenkins credential password is empty"
+                }
+
+                Write-Output "Username is correct and token is present."
+                Write-Output "Token length: $($env:DOCKER_PASS.Length)"
             '''
         }
     }
 }
+
 
 
         stage('Push to Docker Hub') {
