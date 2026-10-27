@@ -4,16 +4,13 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'jino2006/library-management-system'
         DOCKER_TAG = 'v1'
+
+        DOCKER_EXE = 'C:\\Users\\HP\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe'
+        KUBECTL_EXE = 'C:\\Users\\HP\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\kubectl.exe'
+        KUBE_CONFIG = 'C:\\Users\\HP\\.kube\\config'
     }
 
     stages {
-
-        stage('Checkout') {
-            steps {
-                git branch: 'main',
-                    url: 'https://github.com/DominicAllen444-debug/Library-Management-system.git'
-            }
-        }
 
         stage('Build with Maven') {
             steps {
@@ -23,31 +20,55 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                bat 'docker build -t %DOCKER_IMAGE%:%DOCKER_TAG% .'
+                bat '''
+                    "%DOCKER_EXE%" build -t %DOCKER_IMAGE%:%DOCKER_TAG% .
+                '''
             }
         }
 
-      stage('Push to Docker Hub') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'dockerhub-creds',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-            bat '''
-                echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                docker push %DOCKER_IMAGE%:%DOCKER_TAG%
-            '''
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    bat '''
+                        @echo off
+                        echo %DOCKER_PASS% | "%DOCKER_EXE%" login -u %DOCKER_USER% --password-stdin
+                        if errorlevel 1 exit /b 1
+
+                        "%DOCKER_EXE%" push %DOCKER_IMAGE%:%DOCKER_TAG%
+                        if errorlevel 1 exit /b 1
+
+                        "%DOCKER_EXE%" logout
+                    '''
+                }
+            }
         }
-    }
-}
 
         stage('Deploy to Kubernetes') {
             steps {
-                bat 'kubectl apply -f deployment.yaml'
-                bat 'kubectl apply -f service.yaml'
-                bat 'kubectl rollout status deployment/library-management-system'
+                bat '''
+                    "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" apply -f deployment.yaml
+                    if errorlevel 1 exit /b 1
+
+                    "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" apply -f service.yaml
+                    if errorlevel 1 exit /b 1
+
+                    "%KUBECTL_EXE%" --kubeconfig="%KUBE_CONFIG%" rollout status deployment/library-management-system
+                '''
             }
+        }
+
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Check Console Output for the failing stage.'
         }
     }
 }
