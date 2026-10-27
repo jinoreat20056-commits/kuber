@@ -58,31 +58,44 @@ pipeline {
             }
         }
 
-        stage('Verify Docker Hub Credential') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-hub-pat-new',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    powershell '''
-                        $ErrorActionPreference = "Stop"
+      
+stage('Verify Docker Hub Credential') {
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-hub-pat-new',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+            powershell '''
+                $ErrorActionPreference = "Stop"
 
-                        if ($env:DOCKER_USER -ne "jino2006") {
-                            throw "Incorrect Docker Hub username in Jenkins credential."
-                        }
-
-                        if ([string]::IsNullOrWhiteSpace($env:DOCKER_PASS)) {
-                            throw "Docker Hub token is empty."
-                        }
-
-                        Write-Output "Credential username is correct."
-                        Write-Output "Token is present."
-                        Write-Output "Token length: $($env:DOCKER_PASS.Length)"
-                    '''
+                if ($env:DOCKER_USER -ne "jino2006") {
+                    throw "Incorrect Docker Hub username."
                 }
-            }
+
+                $bytes = [Text.Encoding]::UTF8.GetBytes($env:DOCKER_PASS)
+                $algorithm = [Security.Cryptography.SHA256]::Create()
+
+                try {
+                    $sha = $algorithm.ComputeHash($bytes)
+                    $actual = ([BitConverter]::ToString($sha)).Replace("-", "")
+                    $expected = "PASTE_FINGERPRINT_HERE"
+
+                    if ($actual -cne $expected) {
+                        throw "Jenkins credential does not match the tested PAT."
+                    }
+
+                    Write-Output "Jenkins credential matches the tested PAT."
+                }
+                finally {
+                    $algorithm.Dispose()
+                    Remove-Variable bytes, sha, actual, expected -ErrorAction SilentlyContinue
+                }
+            '''
         }
+    }
+}
+
 
         stage('Login to Docker Hub') {
             steps {
