@@ -61,7 +61,7 @@ pipeline {
         stage('Verify Docker Hub Credential') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
+                    credentialsId: 'docker-hub-pat-new',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
